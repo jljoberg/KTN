@@ -13,7 +13,7 @@ The serverIFace thread will manage threads called serversideConnection for each 
 The connection threads will be accessed by serverIFace using the []reflect.SelectCase method.
 
 
-### Client ### 
+### Client 
 The main client thread will use a channel to clientIFace to send and recieve messages.
 clientIFace will set up a TCP-connection with a dedicated serversideConnection thread.
 
