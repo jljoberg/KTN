@@ -1,6 +1,11 @@
 
 # PROSJEKT TTM4100 - Chat server and client #
 
+## TODO
+
+In server: I can't send socket adress using json. Try implementing some kind of id system to relate to sockets
+
+
 ## KTN1 - desctription of design ##
 
 I will implement the chat in golang
