@@ -4,6 +4,7 @@
 ## TODO
 
 In server: I can't send socket adress using json. Try implementing some kind of id system to relate to sockets
+Need to have a timeout chan in selectCases in parseRxs
 
 
 ## KTN1 - desctription of design ##
