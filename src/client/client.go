@@ -13,36 +13,25 @@ func main() {
 	netOutCh := make(chan T.ClientMsg)
 	netInCh := make(chan T.ServerMsg)
 
-	go netMsgHandler(netOutCh, netInCh)
-	time.Sleep(5 * time.Second)
+	go netMsgHandler(netOutCh, netInCh, netInit())
+	time.Sleep(50 * time.Millisecond)
 
-	reader := bufio.NewReader(os.Stdin)
+	inputCh := make(chan T.ClientMsg)
+	go userInput(inputCh)
+
 	for {
-		print("Request: ")
-		request, _ := reader.ReadString('\n')
-		request = request[:len(request)-1]
-		print("Content(if neccessary)")
-		content, _ := reader.ReadString('\n')
-		println()
-
-		clientMsg, ok := clientMsgConstructor(request, content)
-		if ok {
-			println("ClientMsg ok -------------")
-			println("Request is: ", clientMsg.Request)
-			if len(clientMsg.Content) > 0 {
-				println("Content is: ", clientMsg.Content)
-			}
-			netOutCh <- clientMsg
-		} else {
-			println("ClientMsg NOT ok ---///---///---///")
+		select {
+		case input := <-inputCh:
+			println("Main received input")
+			netOutCh <- input
+		case rx := <-netInCh:
+			println(rx.Response)
+			println(rx.Content)
 		}
 	}
-
 }
 
-func netMsgHandler(netOutCh <-chan T.ClientMsg, netInCh chan<- T.ServerMsg) {
-
-	//	for err:=
+func netInit() string {
 	println("Enter host and port to connect to a server...")
 	reader := bufio.NewReader(os.Stdin)
 	print("HOST: ")
@@ -51,8 +40,14 @@ func netMsgHandler(netOutCh <-chan T.ClientMsg, netInCh chan<- T.ServerMsg) {
 	print("PORT: ")
 	PORT, _ := reader.ReadString('\n')
 	PORT = PORT[:len(PORT)-1]
+	return HOST + ":" + PORT
+}
 
-	tcpAddr, _ := net.ResolveTCPAddr("tcp", HOST+":"+PORT)
+func netMsgHandler(netOutCh <-chan T.ClientMsg, netInCh chan<- T.ServerMsg, hostAndPort string) {
+	println("host:port = ", hostAndPort)
+
+	//	for err:=
+	tcpAddr, _ := net.ResolveTCPAddr("tcp", hostAndPort)
 	socket, _ := net.DialTCP("tcp", nil, tcpAddr)
 	defer socket.Close()
 
@@ -113,4 +108,23 @@ func clientMsgConstructor(request, content string) (T.ClientMsg, bool) {
 		}
 	}
 	return clientMsg, false
+}
+
+func userInput(inputCh chan<- T.ClientMsg) {
+	reader := bufio.NewReader(os.Stdin)
+	for {
+		print("Request: ")
+		request, _ := reader.ReadString('\n')
+		request = request[:len(request)-1]
+		print("Content(if neccessary)")
+		content, _ := reader.ReadString('\n')
+		println()
+
+		clientMsg, ok := clientMsgConstructor(request, content)
+		if ok {
+			inputCh <- clientMsg
+		} else {
+			println("ClientMsg NOT ok ---///---///---///")
+		}
+	}
 }

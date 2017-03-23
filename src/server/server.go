@@ -28,12 +28,16 @@ type connAndMsg struct {
 	Socket *net.TCPConn
 	Msg    T.ClientMsg
 }
+type connAndServerMsg struct {
+	Socket *net.TCPConn
+	Msg    T.ServerMsg
+}
 
 func main() {
 	println("Starting Server:\n--------------------------\n\n")
 
 	msgInCh := make(chan connAndMsg)
-	msgOutCh := make(chan T.ServerMsg)
+	msgOutCh := make(chan connAndServerMsg)
 	connUserMap := make(map[*net.TCPConn]string)
 	go netHandler(msgInCh, msgOutCh, &connUserMap)
 
@@ -48,21 +52,24 @@ func main() {
 				if connUserMap[rxSocket] == "" {
 					connUserMap[rxSocket] = rxMsg.Content
 					println("Logging in user", rxMsg.Content)
+					msgOutCh <- connAndServerMsg{rxSocket,
+						T.ServerMsg{time.Now().String(), connUserMap[rxSocket], "Info", "Login Successful"}}
 				} else {
-					println("Already logged in")
+					println("Already logged in as:", connUserMap[rxSocket])
 				}
 			case rxMsg.Request == "logout":
 				connUserMap[rxSocket] = ""
+				msgOutCh <- connAndServerMsg{rxSocket,
+					T.ServerMsg{time.Now().String(), connUserMap[rxSocket], "Info", "Logout Successful"}}
 			case rxMsg.Request == "msg":
 				println("MAIN: Send msg: \n", rxMsg.Content, "------------------------\n")
 
 			}
 		}
 	}
-
 }
 
-func netHandler(msgInCh chan<- connAndMsg, msgOutCh <-chan T.ServerMsg, connUserMapPtr *map[*net.TCPConn]string) {
+func netHandler(msgInCh chan<- connAndMsg, msgOutCh <-chan connAndServerMsg, connUserMapPtr *map[*net.TCPConn]string) {
 	println("Enter host and port to allow connections...")
 	reader := bufio.NewReader(os.Stdin)
 	print("HOST: ")
@@ -79,6 +86,9 @@ func netHandler(msgInCh chan<- connAndMsg, msgOutCh <-chan T.ServerMsg, connUser
 
 	newConnCh := make(chan connAndId)
 	go getTcpConnections(newConnCh, listner)
+
+	txCh := make(chan connAndServerMsg)
+	go transmitter(txCh)
 
 	var selectReceiver []reflect.SelectCase
 	rxCh := make(chan idAndMsg)
@@ -100,14 +110,11 @@ func netHandler(msgInCh chan<- connAndMsg, msgOutCh <-chan T.ServerMsg, connUser
 			)
 
 		case rx := <-rxCh:
-			println("netHandler received request: ", rx.Msg.Request)
-			println("content: ", rx.Msg.Content)
-			println("from id: ", rx.Id, "  | using socket: ", idConnMap[rx.Id])
 
 			msgInCh <- connAndMsg{idConnMap[rx.Id], rx.Msg}
 
 		case tx := <-msgOutCh:
-			println("outgoing;", tx.Response)
+			txCh <- tx
 		}
 	}
 }
@@ -118,14 +125,12 @@ func parseReceivers(selectReceiverPtr *[]reflect.SelectCase, rxCh chan idAndMsg)
 		Chan: reflect.ValueOf(tickCh)})
 	var rxIdAndMsg idAndMsg
 	for {
-		println("parseRecvs: len of current arr is: ", len(*selectReceiverPtr), "\n")
 		index, rxBytes, _ := reflect.Select(*selectReceiverPtr)
 		//rif reflect.TypeOf(rxBytes) == time.Ticker {
 		if index == 0 {
 			continue
 		}
 		json.Unmarshal(rxBytes.Bytes(), &rxIdAndMsg)
-		println("parser got msg from id: ", rxIdAndMsg.Id)
 		rxCh <- rxIdAndMsg
 		time.Sleep(30 * time.Millisecond)
 	}
@@ -151,10 +156,19 @@ func receiver(socket *net.TCPConn, id int, rxCh chan<- []byte) {
 			println("A receiver encountered an error and is quitting")
 			return
 		}
-		println("A receiver Read a msg, applying my socket:", socket)
 		json.Unmarshal(b[:n], &clMsg)
 		rxBytes, _ := json.Marshal(idAndMsg{id, clMsg})
 		rxCh <- rxBytes
+
+	}
+}
+
+func transmitter(txCh <-chan connAndServerMsg) {
+	for {
+		tx := <-txCh
+		socket := tx.Socket
+		b, _ := json.Marshal(tx.Msg)
+		socket.Write(b)
 
 	}
 }
