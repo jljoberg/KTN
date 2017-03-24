@@ -13,13 +13,13 @@ import (
 
 func main() {
 
-	netOutCh := make(chan T.ClientMsg)
-	netInCh := make(chan T.ServerMsg)
+	netOutCh := make(chan T.ClientPayload)
+	netInCh := make(chan T.ServerPayload)
 
 	go netMsgHandler(netOutCh, netInCh, netInit())
 	time.Sleep(50 * time.Millisecond)
 
-	inputCh := make(chan T.ClientMsg)
+	inputCh := make(chan T.ClientPayload)
 	go userInput(inputCh)
 
 	for {
@@ -27,7 +27,7 @@ func main() {
 		case input := <-inputCh:
 			netOutCh <- input
 		case rx := <-netInCh:
-			if rx.Response == "msg" {
+			if rx.Response == "message" || rx.Response == "msg" {
 				println(rx.Timestamp, " -:- ", rx.Sender, ":")
 			} else {
 				println(rx.Response, "------- : ")
@@ -50,13 +50,13 @@ func netInit() string {
 	return HOST + ":" + PORT
 }
 
-func netMsgHandler(netOutCh <-chan T.ClientMsg, netInCh chan<- T.ServerMsg, hostAndPort string) {
+func netMsgHandler(netOutCh <-chan T.ClientPayload, netInCh chan<- T.ServerPayload, hostAndPort string) {
 	tcpAddr, _ := net.ResolveTCPAddr("tcp", hostAndPort)
 	socket, _ := net.DialTCP("tcp", nil, tcpAddr)
 	defer socket.Close()
 
-	rxCh := make(chan T.ServerMsg)
-	txCh := make(chan T.ClientMsg)
+	rxCh := make(chan T.ServerPayload)
+	txCh := make(chan T.ClientPayload)
 	go receiver(rxCh, socket)
 	go transmitter(txCh, socket)
 
@@ -71,10 +71,10 @@ func netMsgHandler(netOutCh <-chan T.ClientMsg, netInCh chan<- T.ServerMsg, host
 
 }
 
-func receiver(rxCh chan<- T.ServerMsg, socket *net.TCPConn) {
+func receiver(rxCh chan<- T.ServerPayload, socket *net.TCPConn) {
 	var b [4096]byte
-	var srvMsg T.ServerMsg
-	var hMsg T.HistoryMsg
+	var srvMsg T.ServerPayload
+	var hMsg T.HistoryPayload
 	for {
 		n, _ := socket.Read(b[:])
 		err := json.Unmarshal(b[:n], &srvMsg)
@@ -95,7 +95,7 @@ func receiver(rxCh chan<- T.ServerMsg, socket *net.TCPConn) {
 		rxCh <- srvMsg
 	}
 }
-func transmitter(txCh <-chan T.ClientMsg, socket *net.TCPConn) {
+func transmitter(txCh <-chan T.ClientPayload, socket *net.TCPConn) {
 	for {
 		msg := <-txCh
 		b, _ := json.Marshal(msg)
@@ -103,14 +103,14 @@ func transmitter(txCh <-chan T.ClientMsg, socket *net.TCPConn) {
 	}
 }
 
-func clientMsgConstructor(request, content string) (T.ClientMsg, bool) {
+func clientMsgConstructor(request, content string) (T.ClientPayload, bool) {
 	var validRequests []string
 	validRequests = append(validRequests, "login", "logout")
 	validRequests = append(validRequests, "msg")
 	validRequests = append(validRequests, "names")
 	validRequests = append(validRequests, "help")
 
-	var clientMsg T.ClientMsg
+	var clientMsg T.ClientPayload
 	for _, legalRequest := range validRequests {
 		if request == legalRequest {
 			clientMsg.Request = request
@@ -123,7 +123,7 @@ func clientMsgConstructor(request, content string) (T.ClientMsg, bool) {
 	return clientMsg, false
 }
 
-func userInput(inputCh chan<- T.ClientMsg) {
+func userInput(inputCh chan<- T.ClientPayload) {
 	reader := bufio.NewReader(os.Stdin)
 	var request, content string
 	println("Prefix commands with '/'. Type '/help' for availible commands")

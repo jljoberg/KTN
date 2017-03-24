@@ -1,20 +1,23 @@
 package typeDef
 
-type ClientMsg struct {
-	Request string
-	Content string
+// ClientPayload exported
+type ClientPayload struct {
+	Request string `json:"request"`
+	Content string `json:"content"`
 }
 
-type ServerMsg struct {
-	Timestamp string
-	Sender    string
-	Response  string
-	Content   string
+// ServerPayload exported
+type ServerPayload struct {
+	Timestamp string `json:"timestamp"`
+	Sender    string `json:"sender"`
+	Response  string `json:"response"`
+	Content   string `json:"content"`
 }
 
-type HistoryMsg struct {
-	Timestamp string
-	Sender    string
-	Response  string
-	Content   [][]byte
+// HistoryPayload Exported
+type HistoryPayload struct {
+	Timestamp string   `json:"timestamp"`
+	Sender    string   `json:"sender"`
+	Response  string   `json:"response"`
+	Content   [][]byte `json:"content"`
 }

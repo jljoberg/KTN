@@ -10,6 +10,20 @@ import (
 	T "typeDef"
 )
 
+type ServerPayload struct {
+	timestamp string
+	sender    string
+	response  string
+	content   string
+}
+
+type ProtocolHistoryMsg struct {
+	timestamp string
+	sender    string
+	response  string
+	content   [][]byte
+}
+
 type connAndBytes struct {
 	Socket *net.TCPConn
 	Bytes  []byte
@@ -22,19 +36,19 @@ type connAndId struct {
 
 type idAndMsg struct {
 	Id  int
-	Msg T.ClientMsg
+	Msg T.ClientPayload
 }
 type connAndMsg struct {
 	Socket *net.TCPConn
-	Msg    T.ClientMsg
+	Msg    T.ClientPayload
 }
 type connAndServerMsg struct {
 	Socket *net.TCPConn
-	Msg    T.ServerMsg
+	Msg    T.ServerPayload
 }
 type connAndHistory struct {
 	Socket  *net.TCPConn
-	History T.HistoryMsg
+	History T.HistoryPayload
 }
 
 func main() {
@@ -59,30 +73,31 @@ func main() {
 					connUserMap[rxSocket] = rxMsg.Content
 					println("Logging in user", rxMsg.Content)
 					msgOutCh <- connAndServerMsg{rxSocket,
-						T.ServerMsg{time.Now().String(), "server", "info", "Login Successful"}}
+						T.ServerPayload{time.Now().String(), "server", "info", "Login Successful"}}
 					time.Sleep(30 * time.Millisecond)
 					historyOutCh <- connAndHistory{rx.Socket,
-						T.HistoryMsg{time.Now().String(), "server", "history", history}}
+						T.HistoryPayload{time.Now().String(), "server", "history", history}}
 				} else if connUserMap[rxSocket] != "" {
 					msgOutCh <- connAndServerMsg{rxSocket,
-						T.ServerMsg{time.Now().String(), "server", "error", "Already logged in"}}
+						T.ServerPayload{time.Now().String(), "server", "error", "Already logged in"}}
 				} else if !nameAvailible(rxMsg.Content, connUserMap) {
 					msgOutCh <- connAndServerMsg{rxSocket,
-						T.ServerMsg{time.Now().String(), "server", "error", "Username taken"}}
+						T.ServerPayload{time.Now().String(), "server", "error", "Username taken"}}
 				} else {
 					msgOutCh <- connAndServerMsg{rxSocket,
-						T.ServerMsg{time.Now().String(), "server", "error", "Username not valid"}}
+						T.ServerPayload{time.Now().String(), "server", "error", "Username not valid"}}
 				}
 			case rxMsg.Request == "logout":
 				connUserMap[rxSocket] = ""
 				msgOutCh <- connAndServerMsg{rxSocket,
-					T.ServerMsg{time.Now().String(), connUserMap[rxSocket], "info", "Logout Successful"}}
+					T.ServerPayload{time.Now().String(), connUserMap[rxSocket], "info", "Logout Successful"}}
 			case rxMsg.Request == "msg":
 				if connUserMap[rxSocket] == "" {
 					msgOutCh <- connAndServerMsg{rxSocket,
-						T.ServerMsg{time.Now().String(), "server", "error", "You are not logged in"}}
+						T.ServerPayload{Timestamp: time.Now().String(), Sender: "server", Response: "error", Content: "You are not logged in"}}
 				} else {
-					srvMsg := T.ServerMsg{time.Now().String(), connUserMap[rxSocket], "msg", rxMsg.Content}
+					srvMsg := T.ServerPayload{Timestamp: time.Now().String(), Sender: connUserMap[rxSocket],
+						Response: "message", Content: rxMsg.Content}
 					bcast(connUserMap, srvMsg)
 					msgBytes, _ := json.Marshal(srvMsg)
 					history = append(history, msgBytes)
@@ -93,13 +108,14 @@ func main() {
 					names = names + user + "\n"
 				}
 				msgOutCh <- connAndServerMsg{rxSocket,
-					T.ServerMsg{time.Now().String(), "server", "info", names}}
+					T.ServerPayload{time.Now().String(), "server", "info", names}}
 			case rxMsg.Request == "help":
+				println("request: help")
 				msgOutCh <- connAndServerMsg{rxSocket,
-					T.ServerMsg{time.Now().String(), "server", "info", helpMsg}}
+					T.ServerPayload{Timestamp: time.Now().String(), Sender: "server", Response: "info", Content: helpMsg}}
 			default:
 				msgOutCh <- connAndServerMsg{rxSocket,
-					T.ServerMsg{time.Now().String(), "server", "error", "BAD REQUEST"}}
+					T.ServerPayload{time.Now().String(), "server", "error", "BAD REQUEST"}}
 			}
 		}
 	}
@@ -191,7 +207,7 @@ func receiver(socket *net.TCPConn, id int, rxCh chan<- []byte, delConnCh chan<- 
 	println("Starting a new receiver")
 	println("I am using socket: ", socket, " | id: ", id)
 	var b [4096]byte
-	var clMsg T.ClientMsg
+	var clMsg T.ClientPayload
 	for {
 		n, err := socket.Read(b[:])
 		if err != nil {
@@ -207,11 +223,11 @@ func receiver(socket *net.TCPConn, id int, rxCh chan<- []byte, delConnCh chan<- 
 }
 
 func transmitter(txCh <-chan connAndServerMsg, txHistoryCh <-chan connAndHistory) {
-	i := 0
 	for {
 		select {
 		case tx := <-txCh:
-			b, _ := json.Marshal(tx.Msg)
+			pcTx := T.ServerPayload{tx.Msg.Timestamp, tx.Msg.Sender, tx.Msg.Response, tx.Msg.Content}
+			b, _ := json.Marshal(pcTx)
 			tx.Socket.Write(b)
 		case tx := <-txHistoryCh:
 			println("History: ------____--------\n")
@@ -219,18 +235,19 @@ func transmitter(txCh <-chan connAndServerMsg, txHistoryCh <-chan connAndHistory
 				println(len(tx.History.Content))
 				b, _ := json.Marshal(tx.History)
 				tx.Socket.Write(b)
-				i++
 			}
 		}
 	}
 }
 
-func bcast(connUserMap map[*net.TCPConn]string, msg T.ServerMsg) {
+func bcast(connUserMap map[*net.TCPConn]string, msg T.ServerPayload) {
 	for socket, user := range connUserMap {
 		if user == "" {
 			continue
 		}
-		b, _ := json.Marshal(msg)
+		pcTx := T.ServerPayload{Timestamp: msg.Timestamp, Sender: msg.Sender, Response: msg.Response, Content: msg.Content}
+		b, _ := json.Marshal(pcTx)
+		os.Stdout.Write(b)
 		socket.Write(b)
 	}
 }
