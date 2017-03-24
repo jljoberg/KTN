@@ -38,6 +38,7 @@ type connAndHistory struct {
 }
 
 func main() {
+	helpMsg := "login [userName]\nlogout\nmsg [msg]\nnames\nhelp"
 	var history [][]byte
 
 	msgInCh := make(chan connAndMsg)
@@ -72,7 +73,6 @@ func main() {
 					msgOutCh <- connAndServerMsg{rxSocket,
 						T.ServerMsg{time.Now().String(), "server", "error", "Username not valid"}}
 				}
-
 			case rxMsg.Request == "logout":
 				connUserMap[rxSocket] = ""
 				msgOutCh <- connAndServerMsg{rxSocket,
@@ -87,7 +87,6 @@ func main() {
 					msgBytes, _ := json.Marshal(srvMsg)
 					history = append(history, msgBytes)
 				}
-
 			case rxMsg.Request == "names":
 				names := ""
 				for _, user := range connUserMap {
@@ -95,6 +94,12 @@ func main() {
 				}
 				msgOutCh <- connAndServerMsg{rxSocket,
 					T.ServerMsg{time.Now().String(), "server", "info", names}}
+			case rxMsg.Request == "help":
+				msgOutCh <- connAndServerMsg{rxSocket,
+					T.ServerMsg{time.Now().String(), "server", "info", helpMsg}}
+			default:
+				msgOutCh <- connAndServerMsg{rxSocket,
+					T.ServerMsg{time.Now().String(), "server", "error", "BAD REQUEST"}}
 			}
 		}
 	}

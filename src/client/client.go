@@ -1,12 +1,15 @@
 package main
 
 //import "fmt"
-import "encoding/json"
-import "bufio"
-import "net"
-import "os"
-import "time"
-import T "typeDef"
+import (
+	"bufio"
+	"encoding/json"
+	"net"
+	"os"
+	"strings"
+	"time"
+	T "typeDef"
+)
 
 func main() {
 
@@ -115,25 +118,42 @@ func clientMsgConstructor(request, content string) (T.ClientMsg, bool) {
 			return clientMsg, true
 		}
 	}
+	clientMsg.Request = request
+	clientMsg.Content = content
 	return clientMsg, false
 }
 
 func userInput(inputCh chan<- T.ClientMsg) {
 	reader := bufio.NewReader(os.Stdin)
+	var request, content string
+	println("Prefix commands with '/'. Type '/help' for availible commands")
 	for {
-		print("Request: ")
-		request, _ := reader.ReadString('\n')
-		request = request[:len(request)-1]
-		print("Content: ")
-		content, _ := reader.ReadString('\n')
-		content = content[:len(content)-1]
-		println()
+		input, _ := reader.ReadString('\n')
+		input = input[:len(input)-1]
+		if len(input) == 0 {
+			continue
+		}
+		if input[0] == '/' {
+			temp := strings.SplitAfterN(input, " ", 2)
+			request = (temp[0])[1:]
+			if len(temp) > 1 {
+				content = temp[1]
+				println(request)
+			}
+		} else {
+			request = "msg"
+			content = input
+		}
+		for request[len(request)-1] == ' ' {
+			request = request[:len(request)-1]
+		}
 
 		clientMsg, ok := clientMsgConstructor(request, content)
 		if ok {
 			inputCh <- clientMsg
 		} else {
 			println("ClientMsg NOT ok ---///---///---///")
+			inputCh <- clientMsg
 		}
 		time.Sleep(100 * time.Millisecond)
 	}
