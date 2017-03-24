@@ -22,12 +22,16 @@ func main() {
 	for {
 		select {
 		case input := <-inputCh:
-			println("Main received input")
 			netOutCh <- input
 		case rx := <-netInCh:
-			println(rx.Response)
+			if rx.Response == "msg" {
+				println(rx.Timestamp, " -:- ", rx.Sender, ":")
+			} else {
+				println(rx.Response, "------- : ")
+			}
 			println(rx.Content)
 		}
+		println("-------------------------------------------------------")
 	}
 }
 
@@ -44,9 +48,6 @@ func netInit() string {
 }
 
 func netMsgHandler(netOutCh <-chan T.ClientMsg, netInCh chan<- T.ServerMsg, hostAndPort string) {
-	println("host:port = ", hostAndPort)
-
-	//	for err:=
 	tcpAddr, _ := net.ResolveTCPAddr("tcp", hostAndPort)
 	socket, _ := net.DialTCP("tcp", nil, tcpAddr)
 	defer socket.Close()
@@ -59,9 +60,7 @@ func netMsgHandler(netOutCh <-chan T.ClientMsg, netInCh chan<- T.ServerMsg, host
 	for {
 		select {
 		case rx := <-rxCh:
-			println("netMsgHandler(): I received a msg, sending to main")
 			netInCh <- rx
-
 		case tx := <-netOutCh:
 			txCh <- tx
 		}
@@ -72,11 +71,23 @@ func netMsgHandler(netOutCh <-chan T.ClientMsg, netInCh chan<- T.ServerMsg, host
 func receiver(rxCh chan<- T.ServerMsg, socket *net.TCPConn) {
 	var b [4096]byte
 	var srvMsg T.ServerMsg
+	var hMsg T.HistoryMsg
 	for {
 		n, _ := socket.Read(b[:])
 		err := json.Unmarshal(b[:n], &srvMsg)
 		if err != nil {
-			println("Could not unmarshall in client-receiver")
+			err := json.Unmarshal(b[:n], &hMsg)
+			if err != nil {
+				println("unmarshal error in second loop")
+				continue
+			}
+			println("   ---     GETTING HISTORY   ---\n---------------------------------------")
+			for _, hB := range hMsg.Content {
+				json.Unmarshal(hB, &srvMsg)
+				rxCh <- srvMsg
+				continue
+			}
+			continue
 		}
 		rxCh <- srvMsg
 	}
@@ -84,12 +95,9 @@ func receiver(rxCh chan<- T.ServerMsg, socket *net.TCPConn) {
 func transmitter(txCh <-chan T.ClientMsg, socket *net.TCPConn) {
 	for {
 		msg := <-txCh
-		println("tx received something")
 		b, _ := json.Marshal(msg)
 		socket.Write(b)
-		println("tx sent something")
 	}
-
 }
 
 func clientMsgConstructor(request, content string) (T.ClientMsg, bool) {
@@ -116,8 +124,9 @@ func userInput(inputCh chan<- T.ClientMsg) {
 		print("Request: ")
 		request, _ := reader.ReadString('\n')
 		request = request[:len(request)-1]
-		print("Content(if neccessary)")
+		print("Content: ")
 		content, _ := reader.ReadString('\n')
+		content = content[:len(content)-1]
 		println()
 
 		clientMsg, ok := clientMsgConstructor(request, content)
@@ -126,5 +135,6 @@ func userInput(inputCh chan<- T.ClientMsg) {
 		} else {
 			println("ClientMsg NOT ok ---///---///---///")
 		}
+		time.Sleep(100 * time.Millisecond)
 	}
 }
